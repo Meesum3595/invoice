@@ -3,12 +3,12 @@ jobs:
   build:
     working_directory: /go/src/github.com/Meesum3595/invoice
     docker:
-      - image: golang:1.21  # Updated to use the official Golang image
+      - image: golang:1.23  # Upgraded to Go 1.23 to match module requirements
     environment:
       GO15VENDOREXPERIMENT: 1
     branches:
       only:
-        - main  # Updated from 'master' to 'main'
+        - main
     steps:
       - checkout
       - setup_remote_docker
@@ -18,7 +18,7 @@ jobs:
           name: Initialize Go module
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go mod init github.com/Meesum3595/invoice || true  # Initialize if not exists
+            go mod init github.com/Meesum3595/invoice || true
             go mod tidy  # Ensure dependencies are correct
 
       # Set up environment variables
@@ -26,7 +26,14 @@ jobs:
       - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV
       - run: mkdir -p "${GOPATH_BASE}"
       - run: mkdir -p "${GOPATH_HEAD}/bin"
-      - run: go install github.com/govend/govend@latest
+
+      # Install dependencies
+      - run:
+          name: Install dependencies
+          command: |
+            cd /go/src/github.com/Meesum3595/invoice
+            go mod tidy
+            go get -d ./...  # Download all dependencies
 
       # Build the application
       - run:
@@ -47,7 +54,7 @@ jobs:
           name: Test dependencies are up to date
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            govend -u --prune
+            go mod tidy
 
       # Deploy to local machine
       - deploy:
