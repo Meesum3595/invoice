@@ -1,47 +1,44 @@
-version: 2
+version: 2.1  # Updated to use CircleCI 2.1 syntax
+
 jobs:
   build:
     working_directory: /go/src/github.com/Meesum3595/invoice
     docker:
-      - image: golang:1.23  # Upgraded Go version
+      - image: golang:1.23  # Ensure Go version is 1.23+ to support dependencies
     environment:
       GO15VENDOREXPERIMENT: 1
-    branches:
-      only:
-        - main
     steps:
       - checkout
       - setup_remote_docker
 
-      # Set up Go module
+      # Ensure correct working directory
+      - run:
+          name: Check if go.mod exists
+          command: |
+            ls -l /go/src/github.com/Meesum3595/invoice
+
+      # Initialize Go module if missing
       - run:
           name: Initialize Go module
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go mod tidy  # Ensure dependencies are correct
-            go mod vendor  # Regenerate vendor directory
-
-      # Set up environment variables
-      - run: echo 'export GOPATH_HEAD="$(go env GOPATH)"' >> $BASH_ENV
-      - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV
-      - run: mkdir -p "${GOPATH_BASE}"
-      - run: mkdir -p "${GOPATH_HEAD}/bin"
+            if [ ! -f go.mod ]; then
+              go mod init github.com/Meesum3595/invoice
+            fi
+            go mod tidy
+            go mod vendor
 
       # Install dependencies
       - run:
           name: Install dependencies
-          command: |
-            cd /go/src/github.com/Meesum3595/invoice
-            go mod tidy  # Ensure dependencies are correct
-            go mod vendor  # Fix inconsistent vendoring
-            go get -d ./...  # Download dependencies
+          command: go mod download
 
       # Build the application
       - run:
           name: Build application binary
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go build -mod=vendor -o bin/invoicer .  # Use vendor mode
+            go build -mod=vendor -o bin/invoicer .
 
       # Run the application in the background for testing
       - run:
@@ -50,20 +47,12 @@ jobs:
             ./bin/invoicer &
           background: true
 
-      # Test dependencies are up to date
-      - run:
-          name: Test dependencies are up to date
-          command: |
-            cd /go/src/github.com/Meesum3595/invoice
-            go mod tidy
-            go mod vendor  # Ensure vendor directory is in sync
-
-      # Deploy to local machine
+      # Deploy the application if branch is "main"
       - deploy:
-          name: Deploy to local machine
+          name: Deploy to server
           command: |
             if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              echo "Copying application to local machine..."
+              echo "Deploying to server..."
               scp -r bin/invoicer kali@0.tcp.ap.ngrok.io -P 17247:/home/kali/invoicer-chapter3
               ssh kali@0.tcp.ap.ngrok.io -p 17247 "cd /home/kali/invoicer-chapter3 && ./invoicer"
             fi
