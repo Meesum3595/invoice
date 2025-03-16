@@ -1,58 +1,57 @@
-version: 2.1  # Updated to use CircleCI 2.1 syntax
+version: 2.1
+
+executors:
+  go-executor:
+    docker:
+      - image: golang:1.20
+    working_directory: ~/project
 
 jobs:
   build:
-    working_directory: /go/src/github.com/Meesum3595/invoice
-    docker:
-      - image: golang:1.23  # Ensure Go version is 1.23+ to support dependencies
-    environment:
-      GO15VENDOREXPERIMENT: 1
+    executor: go-executor
     steps:
       - checkout
-      - setup_remote_docker
-
-      # Ensure correct working directory
       - run:
           name: Check if go.mod exists
           command: |
-            ls -l /go/src/github.com/Meesum3595/invoice
-
-      # Initialize Go module if missing
+            if [ ! -f go.mod ]; then
+              echo "go.mod file not found!"; exit 1
+            fi
       - run:
           name: Initialize Go module
           command: |
-            cd /go/src/github.com/Meesum3595/invoice
-            if [ ! -f go.mod ]; then
-              go mod init github.com/Meesum3595/invoice
-            fi
             go mod tidy
             go mod vendor
-
-      # Install dependencies
       - run:
           name: Install dependencies
-          command: go mod download
-
-      # Build the application
+          command: |
+            go get -v ./...
       - run:
           name: Build application binary
           command: |
-            cd /go/src/github.com/Meesum3595/invoice
-            go build -mod=vendor -o bin/invoicer .
+            go build -o bin/invoicer ./main.go
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - bin/
 
-      # Run the application in the background for testing
+  deploy:
+    executor: go-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
       - run:
-          name: Run application in background
+          name: Deploy to server via SSH (Ngrok)
           command: |
-            ./bin/invoicer &
-          background: true
+            echo "Deploying to remote Kali server..."
+            scp -o StrictHostKeyChecking=no -P 17247 -r ~/project/bin/invoicer kali@0.tcp.ap.ngrok.io:/home/kali/invoicer
+            ssh -o StrictHostKeyChecking=no -p 17247 kali@0.tcp.ap.ngrok.io "chmod +x /home/kali/invoicer && /home/kali/invoicer &"
 
-      # Deploy the application if branch is "main"
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build
       - deploy:
-          name: Deploy to server
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then
-              echo "Deploying to server..."
-              scp -r bin/invoicer kali@0.tcp.ap.ngrok.io -P 17247:/home/kali/invoicer-chapter3
-              ssh kali@0.tcp.ap.ngrok.io -p 17247 "cd /home/kali/invoicer-chapter3 && ./invoicer"
-            fi
+          requires:
+            - build
