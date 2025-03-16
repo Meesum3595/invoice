@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: /go/src/github.com/Meesum3595/invoice  # Updated to your repo
+    working_directory: /go/src/github.com/Meesum3595/invoice
     docker:
       - image: golang:1.21  # Updated to use the official Golang image
     environment:
@@ -13,9 +13,17 @@ jobs:
       - checkout
       - setup_remote_docker
 
+      # Set up Go module
+      - run:
+          name: Initialize Go module
+          command: |
+            cd /go/src/github.com/Meesum3595/invoice
+            go mod init github.com/Meesum3595/invoice || true  # Initialize if not exists
+            go mod tidy  # Ensure dependencies are correct
+
       # Set up environment variables
-      - run: echo 'export GOPATH_HEAD="$(echo ${GOPATH}|cut -d ':' -f 1)"' >> $BASH_ENV
-      - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV  # Updated to your GitHub username
+      - run: echo 'export GOPATH_HEAD="$(go env GOPATH)"' >> $BASH_ENV
+      - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV
       - run: mkdir -p "${GOPATH_BASE}"
       - run: mkdir -p "${GOPATH_HEAD}/bin"
       - run: go install github.com/govend/govend@latest
@@ -24,9 +32,8 @@ jobs:
       - run:
           name: Build application binary
           command: |
-            go install --ldflags '-extldflags "-static"' github.com/Meesum3595/invoice;
-            [ ! -e bin ] && mkdir bin;
-            cp "${GOPATH_HEAD}/bin/invoice" bin/invoicer;
+            cd /go/src/github.com/Meesum3595/invoice
+            go build -o bin/invoicer .  # Uses `go build` instead of `go install`
 
       # Run the application in the background for testing
       - run:
@@ -39,7 +46,8 @@ jobs:
       - run:
           name: Test dependencies are up to date
           command: |
-            GOPATH="${GOPATH_HEAD}"; ( cd ${GOPATH_BASE}/invoice && govend -u --prune )
+            cd /go/src/github.com/Meesum3595/invoice
+            govend -u --prune
 
       # Deploy to local machine
       - deploy:
