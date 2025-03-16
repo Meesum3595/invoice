@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: /go/src/github.com/Meesum3595/invoice
     docker:
-      - image: golang:1.23  # Upgraded to Go 1.23 to match module requirements
+      - image: golang:1.23  # Upgraded Go version
     environment:
       GO15VENDOREXPERIMENT: 1
     branches:
@@ -18,8 +18,8 @@ jobs:
           name: Initialize Go module
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go mod init github.com/Meesum3595/invoice || true
             go mod tidy  # Ensure dependencies are correct
+            go mod vendor  # Regenerate vendor directory
 
       # Set up environment variables
       - run: echo 'export GOPATH_HEAD="$(go env GOPATH)"' >> $BASH_ENV
@@ -32,15 +32,16 @@ jobs:
           name: Install dependencies
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go mod tidy
-            go get -d ./...  # Download all dependencies
+            go mod tidy  # Ensure dependencies are correct
+            go mod vendor  # Fix inconsistent vendoring
+            go get -d ./...  # Download dependencies
 
       # Build the application
       - run:
           name: Build application binary
           command: |
             cd /go/src/github.com/Meesum3595/invoice
-            go build -o bin/invoicer .  # Uses `go build` instead of `go install`
+            go build -mod=vendor -o bin/invoicer .  # Use vendor mode
 
       # Run the application in the background for testing
       - run:
@@ -55,6 +56,7 @@ jobs:
           command: |
             cd /go/src/github.com/Meesum3595/invoice
             go mod tidy
+            go mod vendor  # Ensure vendor directory is in sync
 
       # Deploy to local machine
       - deploy:
