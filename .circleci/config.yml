@@ -46,6 +46,6 @@ jobs:
           command: |
             if [ "${CIRCLE_BRANCH}" == "main" ]; then  # Updated from 'master' to 'main'
               echo "Copying application to local machine..."
-              scp -r bin/invoicer user@your_local_ip:/path/to/deploy  # Update with your local machine details
-              ssh user@your_local_ip "cd /path/to/deploy && ./invoicer"  # Update with your local machine details
+              scp -r bin/invoicer kali@192.168.1.10:/home/kali/invoicer-chapter3
+              ssh kali@192.168.1.10 "cd /home/kali/invoicer-chapter3 && ./invoicer"
             fi
