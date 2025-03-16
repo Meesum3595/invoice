@@ -1,51 +1,68 @@
-version: 2
+version: 2.1
+
 jobs:
   build:
-    working_directory: /go/src/github.com/Meesum3595/invoice  # Updated to your repo
+    working_directory: /go/src/github.com/Meesum3595/invoice  # Updated repo path
     docker:
-      - image: circleci/golang:1.8
+      - image: circleci/golang:1.18  # Updated to a newer Go version
     environment:
       GO15VENDOREXPERIMENT: 1
-    branches:
-      only:
-        - main  # Updated from 'master' to 'main'
     steps:
       - checkout
-      - setup_remote_docker
 
       # Set up environment variables
       - run: echo 'export GOPATH_HEAD="$(echo ${GOPATH}|cut -d ':' -f 1)"' >> $BASH_ENV
-      - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV  # Updated to your GitHub username
+      - run: echo 'export GOPATH_BASE="${GOPATH_HEAD}/src/github.com/Meesum3595"' >> $BASH_ENV
       - run: mkdir -p "${GOPATH_BASE}"
       - run: mkdir -p "${GOPATH_HEAD}/bin"
-      - run: go get github.com/govend/govend
+      
+      # Install dependencies
+      - run:
+          name: Install govend
+          command: go install github.com/govend/govend@latest  # Updated
 
       # Build the application
       - run:
           name: Build application binary
           command: |
-            go install --ldflags '-extldflags "-static"' github.com/Meesum3595/invoice;  # Updated to your repo
-            [ ! -e bin ] && mkdir bin;
-            cp "${GOPATH_HEAD}/bin/invoice" bin/invoicer;  # Updated binary name
+            go build -o bin/invoicer github.com/Meesum3595/invoice  # Updated go install to go build
 
       # Run the application in the background for testing
       - run:
           name: Run application in background
-          command: |
-            ./bin/invoicer &
+          command: ./bin/invoicer &
           background: true
 
-      # Test dependencies are up to date
+      # Ensure dependencies are up to date
       - run:
           name: Test dependencies are up to date
-          command: 'GOPATH="${GOPATH_HEAD}"; ( cd ${GOPATH_BASE}/invoice && govend -u --prune )'  # Removed git diff --quiet
-
-      # Deploy to local machine
-      - deploy:
-          name: Deploy to local machine
           command: |
-            if [ "${CIRCLE_BRANCH}" == "main" ]; then  # Updated from 'master' to 'main'
-              echo "Copying application to local machine..."
-              scp -i ~/.ssh/id_rsa -r bin/invoicer kali@0.tcp.ap.ngrok.io -P 17247:/home/kali/invoicer-chapter3
-              ssh -i ~/.ssh/id_rsa kali@0.tcp.ap.ngrok.io -p 17247 "cd /home/kali/invoicer-chapter3 && ./invoicer"
+            cd ${GOPATH_BASE}/invoice
+            go mod tidy  # Replaces govend
+            go mod vendor  # Ensures all dependencies are in vendor/
+
+  deploy:
+    docker:
+      - image: circleci/golang:1.18
+    steps:
+      - checkout
+      - run:
+          name: Deploy to Remote Server
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              echo "Deploying to remote machine..."
+              scp -P 17247 bin/invoicer kali@0.tcp.ap.ngrok.io:/home/kali/invoicer-chapter3/invoicer
+              ssh kali@0.tcp.ap.ngrok.io -p 17247 "chmod +x /home/kali/invoicer-chapter3/invoicer && /home/kali/invoicer-chapter3/invoicer"
             fi
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: main  # Ensures deployment only happens on main branch
